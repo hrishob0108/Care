@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 import { motion } from "framer-motion";
 import { FaPills, FaClock, FaSync } from "react-icons/fa";
 import "./ElderDashboard.css";
@@ -25,7 +26,7 @@ export default function ElderlyDashboard() {
       try {
         const token = localStorage.getItem("token");
         const response = await axios.get(
-          "http://localhost:3000/api/medications",
+          `${API_URL}/api/medications`,
           {
             headers: {
               Authorization: `Bearer ${token}`,

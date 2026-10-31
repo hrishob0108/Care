@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { FaUser, FaEnvelope, FaLock, FaPhone } from "react-icons/fa";
 
 import axios from "axios";
+import { API_URL } from "../config";
 import { jwtDecode } from "jwt-decode";
 
 import "./Signup.css";
@@ -21,7 +22,7 @@ export default function Signup() {
     setError("");
 
     try {
-      const response = await axios.post("http://localhost:3000/api/signup", {
+      const response = await axios.post(`${API_URL}/api/signup`, {
         name: username,
         email: email,
         password: password,
