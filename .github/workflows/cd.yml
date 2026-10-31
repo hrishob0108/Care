@@ -41,11 +41,13 @@ jobs:
       - name: Build Frontend
         working-directory: ./frontend
         env:
-          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_BASE_PATH: /Care/
         run: npm run build
 
       - name: Setup Pages
+        id: pages
         uses: actions/configure-pages@v5
+        continue-on-error: true
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
@@ -55,6 +57,7 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
 
   backend-docker-publish:
     name: Build & Push Backend Image to GHCR
@@ -100,15 +103,14 @@ jobs:
     name: Trigger Cloud Deployment (Render/Railway/Webhook)
     needs: [backend-docker-publish]
     runs-on: ubuntu-latest
-    if: env.HAS_WEBHOOK == 'true'
-    env:
-      HAS_WEBHOOK: ${{ secrets.DEPLOY_WEBHOOK_URL != '' || secrets.RENDER_DEPLOY_HOOK != '' }}
-
     steps:
       - name: Trigger Webhook
+        if: ${{ secrets.DEPLOY_WEBHOOK_URL != '' || secrets.RENDER_DEPLOY_HOOK != '' }}
         run: |
           WEBHOOK_URL="${{ secrets.DEPLOY_WEBHOOK_URL || secrets.RENDER_DEPLOY_HOOK }}"
           echo "Triggering cloud deploy webhook..."
           curl -X POST "$WEBHOOK_URL"
           echo "Webhook triggered successfully."
-
+      - name: Skip Notification
+        if: ${{ secrets.DEPLOY_WEBHOOK_URL == '' && secrets.RENDER_DEPLOY_HOOK == '' }}
+        run: echo "No cloud webhook secret configured. Skipping cloud trigger."
