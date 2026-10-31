@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: care-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - care-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: care-backend
+    restart: always
+    environment:
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongodb:27017/CareCompanion
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongodb
+    networks:
+      - care-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: care-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - care-network
+
+volumes:
+  mongo-data:
+
+networks:
+  care-network:
+    driver: bridge
+

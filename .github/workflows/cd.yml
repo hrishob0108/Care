@@ -1,0 +1,114 @@
+name: CD Pipeline - Deployment
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: cd-deployment-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  frontend-deploy-pages:
+    name: Deploy Frontend to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  backend-docker-publish:
+    name: Build & Push Backend Image to GHCR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Downcase Repository Name for Docker Tag
+        id: repo-name
+        run: echo "image_name=ghcr.io/${GITHUB_REPOSITORY,,}/backend" >> $GITHUB_OUTPUT
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.repo-name.outputs.image_name }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build and Push Backend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  trigger-cloud-deployment:
+    name: Trigger Cloud Deployment (Render/Railway/Webhook)
+    needs: [backend-docker-publish]
+    runs-on: ubuntu-latest
+    if: env.HAS_WEBHOOK == 'true'
+    env:
+      HAS_WEBHOOK: ${{ secrets.DEPLOY_WEBHOOK_URL != '' || secrets.RENDER_DEPLOY_HOOK != '' }}
+
+    steps:
+      - name: Trigger Webhook
+        run: |
+          WEBHOOK_URL="${{ secrets.DEPLOY_WEBHOOK_URL || secrets.RENDER_DEPLOY_HOOK }}"
+          echo "Triggering cloud deploy webhook..."
+          curl -X POST "$WEBHOOK_URL"
+          echo "Webhook triggered successfully."
+
